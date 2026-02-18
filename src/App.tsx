@@ -130,10 +130,6 @@ function ceilDiv(a: number, b: number): number {
   return Math.floor((a + b - 1) / b);
 }
 
-function formatRange(start: number, end: number): string {
-  return `${start}–${end}`;
-}
-
 function buildDailyPlan({
   total,
   days,
