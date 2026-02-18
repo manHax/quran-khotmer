@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,19 +15,55 @@ import { Progress } from "@/components/ui/progress";
 // - Targets: per day or per prayer (5 daily prayers)
 // - Produces day-by-day ranges and optional prayer-by-prayer breakdown
 
+type Unit = "pages" | "ayat";
+type Mode = "per-day" | "per-prayer";
+
 const DEFAULT_TOTAL_PAGES = 604;
 const DEFAULT_PRAYERS_PER_DAY = 5;
 
-function clampInt(n, min, max) {
+type Slot = {
+  idx: number;
+  start: number | null;
+  end: number | null;
+  size: number;
+};
+
+type DayPlan = {
+  day: number;
+  slots: Slot[];
+  start: number | null;
+  end: number | null;
+  totalThisDay: number;
+};
+
+type BuildDailyPlanArgs = {
+  total: number;
+  days: number;
+  mode: Mode;
+  prayersPerDay: number;
+  unitLabel: string;
+  allowUneven: boolean;
+};
+
+type BuildDailyPlanResult = {
+  daysArr: DayPlan[];
+  slots: Slot[];
+  base: number;
+  remainder: number;
+  totalSlots: number;
+  perSlotLabel: string;
+};
+
+function clampInt(n: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return min;
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
-function ceilDiv(a, b) {
+function ceilDiv(a: number, b: number): number {
   return Math.floor((a + b - 1) / b);
 }
 
-function formatRange(start, end) {
+function formatRange(start: number, end: number): string {
   return `${start}–${end}`;
 }
 
@@ -38,7 +74,7 @@ function buildDailyPlan({
   prayersPerDay,
   unitLabel,
   allowUneven,
-}) {
+}: BuildDailyPlanArgs): BuildDailyPlanResult {
   const totalSlots = mode === "per-prayer" ? days * prayersPerDay : days;
 
   // Base amount per slot
@@ -48,7 +84,7 @@ function buildDailyPlan({
   const remainder = allowUneven ? total - base * totalSlots : Math.max(0, base * totalSlots - total);
 
   // Create slot sizes
-  const slotSizes = [];
+  const slotSizes: number[] = [];
   for (let i = 0; i < totalSlots; i++) {
     if (allowUneven) {
       slotSizes.push(base + (i < remainder ? 1 : 0));
@@ -59,7 +95,7 @@ function buildDailyPlan({
   }
 
   // Convert to ranges
-  const slots = [];
+  const slots: Slot[] = [];
   let cursor = 1;
   for (let i = 0; i < totalSlots; i++) {
     if (cursor > total) {
@@ -74,16 +110,17 @@ function buildDailyPlan({
   }
 
   // Group into days
-  const daysArr = [];
+  const daysArr: DayPlan[] = [];
   if (mode === "per-day") {
     for (let d = 0; d < days; d++) {
       const s = slots[d];
+      // s should exist because totalSlots === days here, but keep safe defaults
       daysArr.push({
         day: d + 1,
-        slots: [s],
-        start: s.start,
-        end: s.end,
-        totalThisDay: s.size,
+        slots: s ? [s] : [],
+        start: s?.start ?? null,
+        end: s?.end ?? null,
+        totalThisDay: s?.size ?? 0,
       });
     }
   } else {
@@ -101,22 +138,22 @@ function buildDailyPlan({
   return { daysArr, slots, base, remainder, totalSlots, perSlotLabel };
 }
 
-function prayerName(i) {
+function prayerName(i: number): string {
   // Map 0..4 -> Subuh, Dzuhur, Ashar, Maghrib, Isya
   const names = ["Subuh", "Dzuhur", "Ashar", "Maghrib", "Isya"];
   return names[i] ?? `Sholat ${i + 1}`;
 }
 
 export default function App() {
-  const [unit, setUnit] = useState("pages"); // 'pages' | 'ayat'
-  const [totalPages, setTotalPages] = useState(DEFAULT_TOTAL_PAGES);
-  const [totalAyat, setTotalAyat] = useState(6236); // common count; user can change
+  const [unit, setUnit] = useState<Unit>("pages"); // 'pages' | 'ayat'
+  const [totalPages, setTotalPages] = useState<number>(DEFAULT_TOTAL_PAGES);
+  const [totalAyat, setTotalAyat] = useState<number>(6236); // common count; user can change
 
-  const [days, setDays] = useState(29); // Ramadan-style default
-  const [mode, setMode] = useState("per-prayer"); // 'per-day' | 'per-prayer'
-  const [prayersPerDay, setPrayersPerDay] = useState(DEFAULT_PRAYERS_PER_DAY);
-  const [allowUneven, setAllowUneven] = useState(true);
-  const [khatamTimes, setKhatamTimes] = useState(1); // target khatam berapa kali
+  const [days, setDays] = useState<number>(29); // Ramadan-style default
+  const [mode, setMode] = useState<Mode>("per-prayer"); // 'per-day' | 'per-prayer'
+  const [prayersPerDay, setPrayersPerDay] = useState<number>(DEFAULT_PRAYERS_PER_DAY);
+  const [allowUneven, setAllowUneven] = useState<boolean>(true);
+  const [khatamTimes, setKhatamTimes] = useState<number>(1); // target khatam berapa kali
 
   const baseTotal = unit === "pages" ? totalPages : totalAyat;
   const total = baseTotal * clampInt(Number(khatamTimes), 1, 1000);
@@ -137,15 +174,15 @@ export default function App() {
   }, [total, days, mode, prayersPerDay, unitLabel, allowUneven]);
 
   // Checklist state per day
-  const [doneDays, setDoneDays] = useState(() => ({}));
+  const [doneDays, setDoneDays] = useState<Record<number, boolean>>({});
   const doneCount = Object.values(doneDays).filter(Boolean).length;
   const progressPct = Math.round((doneCount / Math.max(1, plan.daysArr.length)) * 100);
 
-  function toggleDay(day) {
+  function toggleDay(day: number): void {
     setDoneDays((prev) => ({ ...prev, [day]: !prev[day] }));
   }
 
-  function resetChecklist() {
+  function resetChecklist(): void {
     setDoneDays({});
   }
 
@@ -172,8 +209,9 @@ export default function App() {
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Quran Khatam Separator</h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            Bagi target khatam berdasarkan <span className="font-medium">per hari</span> atau <span className="font-medium">per habis sholat</span>.
-            Bisa pakai unit <span className="font-medium">halaman</span> atau <span className="font-medium">ayat</span>.
+            Bagi target khatam berdasarkan <span className="font-medium">per hari</span> atau{" "}
+            <span className="font-medium">per habis sholat</span>. Bisa pakai unit{" "}
+            <span className="font-medium">halaman</span> atau <span className="font-medium">ayat</span>.
           </p>
         </div>
 
@@ -183,7 +221,7 @@ export default function App() {
               <CardTitle>Input Target</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Tabs value={unit} onValueChange={setUnit}>
+              <Tabs value={unit} onValueChange={(v) => setUnit(v as Unit)}>
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="pages">Halaman</TabsTrigger>
                   <TabsTrigger value="ayat">Ayat</TabsTrigger>
@@ -209,11 +247,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Periode (hari)</Label>
-                  <Input
-                    type="number"
-                    value={days}
-                    onChange={(e) => setDays(clampInt(Number(e.target.value), 1, 366))}
-                  />
+                  <Input type="number" value={days} onChange={(e) => setDays(clampInt(Number(e.target.value), 1, 366))} />
                 </div>
                 <div className="space-y-2">
                   <Label>Target khatam (kali)</Label>
@@ -222,7 +256,9 @@ export default function App() {
                     value={khatamTimes}
                     onChange={(e) => setKhatamTimes(clampInt(Number(e.target.value), 1, 1000))}
                   />
-                  <p className="text-xs text-muted-foreground">Misal 3 = target khatam 3x dalam periode yang kamu set.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Misal 3 = target khatam 3x dalam periode yang kamu set.
+                  </p>
                 </div>
               </div>
 
@@ -267,7 +303,9 @@ export default function App() {
 
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary">Total: {total} {unitLabel}</Badge>
+                  <Badge variant="secondary">
+                    Total: {total} {unitLabel}
+                  </Badge>
                   <Badge variant="secondary">Target: {summary.safeKhatam}x khatam</Badge>
                   <Badge variant="secondary">Periode: {summary.safeDays} hari</Badge>
                   <Badge variant="secondary">Slot: {summary.slots}</Badge>
@@ -281,7 +319,8 @@ export default function App() {
                   {mode === "per-prayer" ? " (per habis sholat)" : " (per hari)"}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Pembagian slot: base {plan.base} {unitLabel}{allowUneven && plan.remainder ? `, +1 untuk ${plan.remainder} slot awal` : ""}.
+                  Pembagian slot: base {plan.base} {unitLabel}
+                  {allowUneven && plan.remainder ? `, +1 untuk ${plan.remainder} slot awal` : ""}.
                 </div>
               </div>
             </CardContent>
@@ -303,7 +342,9 @@ export default function App() {
               </div>
               <Progress value={progressPct} />
               <div className="flex gap-2">
-                <Button variant="secondary" onClick={resetChecklist}>Reset</Button>
+                <Button variant="secondary" onClick={resetChecklist}>
+                  Reset
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 Catatan: checklist ini hanya tersimpan selama halaman tidak di-refresh (sederhana). Kalau mau disimpan permanen, bisa ditambah localStorage.
@@ -327,25 +368,24 @@ export default function App() {
                 <div key={d.day} className="rounded-2xl border p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <Checkbox
-                        checked={!!doneDays[d.day]}
-                        onCheckedChange={() => toggleDay(d.day)}
-                        id={`day-${d.day}`}
-                      />
+                      <Checkbox checked={!!doneDays[d.day]} onCheckedChange={() => toggleDay(d.day)} id={`day-${d.day}`} />
                       <Label htmlFor={`day-${d.day}`} className="cursor-pointer">
                         <span className="font-semibold">Hari {d.day}</span>
                         {d.start && d.end ? (
-                          <span className="text-muted-foreground"> — {formatRange(d.start, d.end)} ({d.totalThisDay} {unitLabel})</span>
+                          <span className="text-muted-foreground">
+                            {" "}
+                            — {formatRange(d.start, d.end)} ({d.totalThisDay} {unitLabel})
+                          </span>
                         ) : (
                           <span className="text-muted-foreground"> — selesai</span>
                         )}
                       </Label>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">{d.totalThisDay} {unitLabel}/hari</Badge>
-                      {mode === "per-prayer" && (
-                        <Badge variant="secondary">{plan.base} {unitLabel}/slot</Badge>
-                      )}
+                      <Badge variant="outline">
+                        {d.totalThisDay} {unitLabel}/hari
+                      </Badge>
+                      {mode === "per-prayer" && <Badge variant="secondary">{plan.base} {unitLabel}/slot</Badge>}
                     </div>
                   </div>
 
@@ -355,9 +395,11 @@ export default function App() {
                         <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
                           <div className="text-xs font-medium text-muted-foreground">{prayerName(idx)}</div>
                           <div className="mt-1 text-sm font-semibold">
-                            {s.start && s.end ? formatRange(s.start, s.end) : "—"}
+                            {s.start != null && s.end != null ? formatRange(s.start, s.end) : "—"}
                           </div>
-                          <div className="text-xs text-muted-foreground">{s.size} {unitLabel}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {s.size} {unitLabel}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -380,9 +422,7 @@ export default function App() {
               <li>
                 Kalau kamu ingin target per hari saja, matikan switch <span className="font-medium text-foreground">Per habis sholat</span>.
               </li>
-              <li>
-                Kalau target terasa berat, naikkan periode atau ubah unit menjadi ayat (lebih fleksibel).
-              </li>
+              <li>Kalau target terasa berat, naikkan periode atau ubah unit menjadi ayat (lebih fleksibel).</li>
             </ul>
           </CardContent>
         </Card>
