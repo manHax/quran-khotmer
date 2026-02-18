@@ -45,6 +45,25 @@ function loadState(): PersistedState | null {
   }
 }
 
+function formatWrappedRange(start: number, end: number, cycleSize: number): string {
+  if (cycleSize <= 0) return `${start}–${end}`;
+
+  const kStart = Math.floor((start - 1) / cycleSize) + 1;
+  const kEnd = Math.floor((end - 1) / cycleSize) + 1;
+
+  const s = ((start - 1) % cycleSize) + 1;
+  const e = ((end - 1) % cycleSize) + 1;
+
+  // masih dalam khatam yang sama
+  if (kStart === kEnd) {
+    return `K${kStart} ${s}–${e}`;
+  }
+
+  // nyebrang batas khatam (mis. 590–604 lalu 1–10)
+  return `K${kStart} ${s}–${cycleSize} + K${kEnd} 1–${e}`;
+}
+
+
 function saveState(state: PersistedState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -569,7 +588,7 @@ export default function App() {
                           {d.start && d.end ? (
                             <span className="text-muted-foreground">
                               {" "}
-                              — {formatRange(d.start, d.end)} ({d.totalThisDay} {unitLabel})
+                              — {formatWrappedRange(d.start, d.end, baseTotal)} ({d.totalThisDay} {unitLabel})
                             </span>
                           ) : (
                             <span className="text-muted-foreground"> — selesai</span>
@@ -611,7 +630,7 @@ export default function App() {
                               </div>
 
                               <div className="mt-1 text-sm font-semibold">
-                                {s.start != null && s.end != null ? formatRange(s.start, s.end) : "—"}
+                                {s.start != null && s.end != null ? formatWrappedRange(s.start, s.end, baseTotal) : "—"}
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 {s.size} {unitLabel}
