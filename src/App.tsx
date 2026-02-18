@@ -92,6 +92,19 @@ function clampInt(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.trunc(n)));
 }
 
+function parseIntOrDefault(
+  raw: string,
+  def: number,
+  min: number,
+  max: number
+): number {
+  const s = raw.trim();
+  if (s === "") return def;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return def;
+  return clampInt(n, min, max);
+}
+
 function ceilDiv(a: number, b: number): number {
   return Math.floor((a + b - 1) / b);
 }
@@ -180,17 +193,25 @@ export default function App() {
   const initial = loadState();
 
   const [unit, setUnit] = useState<Unit>(initial?.unit ?? "pages");
-  const [totalPages, setTotalPages] = useState<number>(initial?.totalPages ?? DEFAULT_TOTAL_PAGES);
-  const [totalAyat, setTotalAyat] = useState<number>(initial?.totalAyat ?? 6236);
 
-  const [days, setDays] = useState<number>(initial?.days ?? 29);
+  const [totalPagesRaw, setTotalPagesRaw] = useState<string>(String(initial?.totalPages ?? DEFAULT_TOTAL_PAGES));
+  const [totalAyatRaw, setTotalAyatRaw] = useState<string>(String(initial?.totalAyat ?? 6236));
+  const [daysRaw, setDaysRaw] = useState<string>(String(initial?.days ?? 29));
+  const [khatamTimesRaw, setKhatamTimesRaw] = useState<string>(String(initial?.khatamTimes ?? 1));
+  const [prayersPerDayRaw, setPrayersPerDayRaw] = useState<string>(String(initial?.prayersPerDay ?? DEFAULT_PRAYERS_PER_DAY));
+
+  const totalPages = parseIntOrDefault(totalPagesRaw, DEFAULT_TOTAL_PAGES, 1, 1_000_000);
+  const totalAyat = parseIntOrDefault(totalAyatRaw, 6236, 1, 1_000_000);
+  const days = parseIntOrDefault(daysRaw, 29, 1, 366);
+  const khatamTimes = parseIntOrDefault(khatamTimesRaw, 1, 1, 1000);
+  const prayersPerDay = parseIntOrDefault(prayersPerDayRaw, DEFAULT_PRAYERS_PER_DAY, 1, 10);
+
   const [mode, setMode] = useState<Mode>(initial?.mode ?? "per-prayer");
-  const [prayersPerDay, setPrayersPerDay] = useState<number>(initial?.prayersPerDay ?? DEFAULT_PRAYERS_PER_DAY);
   const [allowUneven, setAllowUneven] = useState<boolean>(initial?.allowUneven ?? true);
-  const [khatamTimes, setKhatamTimes] = useState<number>(initial?.khatamTimes ?? 1);
 
   const baseTotal = unit === "pages" ? totalPages : totalAyat;
-  const total = baseTotal * clampInt(Number(khatamTimes), 1, 1000);
+  // const total = baseTotal * clampInt(Number(khatamTimes), 1, 1000);
+  const total = baseTotal * khatamTimes;
   const unitLabel = unit === "pages" ? "halaman" : "ayat";
 
   // Checklist per-hari
@@ -336,18 +357,26 @@ export default function App() {
                 <TabsContent value="pages" className="mt-4 space-y-2">
                   <Label>Total halaman (default mushaf 604)</Label>
                   <Input
-                    type="number"
-                    value={totalPages}
-                    onChange={(e) => setTotalPages(clampInt(Number(e.target.value), 1, 1000000))}
+                    inputMode="numeric"
+                    value={totalPagesRaw}
+                    onChange={(e) => setTotalPagesRaw(e.target.value)}
+                    onBlur={() => {
+                      // kalau kosong, isi default
+                      const fixed = parseIntOrDefault(totalPagesRaw, DEFAULT_TOTAL_PAGES, 1, 1_000_000);
+                      setTotalPagesRaw(String(fixed));
+                    }}
                   />
+
                 </TabsContent>
                 <TabsContent value="ayat" className="mt-4 space-y-2">
                   <Label>Total ayat (bisa kamu ubah)</Label>
                   <Input
-                    type="number"
-                    value={totalAyat}
-                    onChange={(e) => setTotalAyat(clampInt(Number(e.target.value), 1, 1000000))}
+                    inputMode="numeric"
+                    value={totalAyatRaw}
+                    onChange={(e) => setTotalAyatRaw(e.target.value)}
+                    onBlur={() => setTotalAyatRaw(String(parseIntOrDefault(totalAyatRaw, 6236, 1, 1_000_000)))}
                   />
+
                 </TabsContent>
               </Tabs>
 
@@ -355,18 +384,22 @@ export default function App() {
                 <div className="space-y-2">
                   <Label>Periode (hari)</Label>
                   <Input
-                    type="number"
-                    value={days}
-                    onChange={(e) => setDays(clampInt(Number(e.target.value), 1, 366))}
+                    inputMode="numeric"
+                    value={daysRaw}
+                    onChange={(e) => setDaysRaw(e.target.value)}
+                    onBlur={() => setDaysRaw(String(parseIntOrDefault(daysRaw, 29, 1, 366)))}
                   />
+
                 </div>
                 <div className="space-y-2">
                   <Label>Target khatam (kali)</Label>
                   <Input
-                    type="number"
-                    value={khatamTimes}
-                    onChange={(e) => setKhatamTimes(clampInt(Number(e.target.value), 1, 1000))}
+                    inputMode="numeric"
+                    value={khatamTimesRaw}
+                    onChange={(e) => setKhatamTimesRaw(e.target.value)}
+                    onBlur={() => setKhatamTimesRaw(String(parseIntOrDefault(khatamTimesRaw, 1, 1, 1000)))}
                   />
+
                   <p className="text-xs text-muted-foreground">Misal 3 = target khatam 3x dalam periode yang kamu set.</p>
                 </div>
               </div>
@@ -390,10 +423,12 @@ export default function App() {
                 <div className="space-y-2">
                   <Label>Jumlah sholat per hari</Label>
                   <Input
-                    type="number"
-                    value={prayersPerDay}
-                    onChange={(e) => setPrayersPerDay(clampInt(Number(e.target.value), 1, 10))}
+                    inputMode="numeric"
+                    value={prayersPerDayRaw}
+                    onChange={(e) => setPrayersPerDayRaw(e.target.value)}
+                    onBlur={() => setPrayersPerDayRaw(String(parseIntOrDefault(prayersPerDayRaw, DEFAULT_PRAYERS_PER_DAY, 1, 10)))}
                   />
+
                   <p className="text-xs text-muted-foreground">Default 5 (Subuh, Dzuhur, Ashar, Maghrib, Isya).</p>
                 </div>
               )}
