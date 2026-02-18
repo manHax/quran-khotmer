@@ -14,6 +14,7 @@ import { useAccentOklch } from "./useAccentOklch";
 import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { ShareCard } from "@/components/ui/ShareCard"
+import CreatableSelect from "react-select/creatable";
 
 // Quran Khatam Separator (simple)
 // - Supports splitting by pages (default 604) or ayat (custom total)
@@ -21,6 +22,8 @@ import { ShareCard } from "@/components/ui/ShareCard"
 // - Produces day-by-day ranges and optional prayer-by-prayer breakdown
 
 const STORAGE_KEY = "quran-khotmer:v1";
+const DEFAULT_PRAYER_OPTIONS = ["Subuh", "Dzuhur", "Ashar", "Maghrib", "Isya"];
+
 
 type Unit = "pages" | "ayat";
 type Mode = "per-day" | "per-prayer";
@@ -36,6 +39,7 @@ type PersistedState = {
   prayersPerDay: number;
   allowUneven: boolean;
   khatamTimes: number;
+  prayerSlots: string[];
 };
 
 function loadState(): PersistedState | null {
@@ -76,7 +80,6 @@ function saveState(state: PersistedState) {
 }
 
 const DEFAULT_TOTAL_PAGES = 604;
-const DEFAULT_PRAYERS_PER_DAY = 5;
 
 type Slot = {
   idx: number;
@@ -215,6 +218,10 @@ export default function App() {
 
 
   const initial = loadState();
+  const [prayerSlots, setPrayerSlots] = useState<string[]>(
+    initial?.prayerSlots?.length ? initial.prayerSlots : []
+  );
+
 
   const [unit, setUnit] = useState<Unit>(initial?.unit ?? "pages");
 
@@ -222,15 +229,15 @@ export default function App() {
   const [totalAyatRaw, setTotalAyatRaw] = useState<string>(String(initial?.totalAyat ?? 6236));
   const [daysRaw, setDaysRaw] = useState<string>(String(initial?.days ?? 29));
   const [khatamTimesRaw, setKhatamTimesRaw] = useState<string>(String(initial?.khatamTimes ?? 1));
-  const [prayersPerDayRaw, setPrayersPerDayRaw] = useState<string>(String(initial?.prayersPerDay ?? DEFAULT_PRAYERS_PER_DAY));
 
   const totalPages = parseIntOrDefault(totalPagesRaw, DEFAULT_TOTAL_PAGES, 1, 1_000_000);
   const totalAyat = parseIntOrDefault(totalAyatRaw, 6236, 1, 1_000_000);
   const days = parseIntOrDefault(daysRaw, 29, 1, 366);
   const khatamTimes = parseIntOrDefault(khatamTimesRaw, 1, 1, 1000);
-  const prayersPerDay = parseIntOrDefault(prayersPerDayRaw, DEFAULT_PRAYERS_PER_DAY, 1, 10);
+  const effectiveMode: Mode = prayerSlots.length > 0 ? "per-prayer" : "per-day";
+  const prayersPerDay = Math.max(1, prayerSlots.length); // dipakai hanya saat per-prayer
 
-  const [mode, setMode] = useState<Mode>(initial?.mode ?? "per-prayer");
+  const [mode] = useState<Mode>(initial?.mode ?? "per-prayer");
   const [allowUneven, setAllowUneven] = useState<boolean>(initial?.allowUneven ?? true);
 
   const baseTotal = unit === "pages" ? totalPages : totalAyat;
@@ -242,6 +249,12 @@ export default function App() {
   const [doneDays, setDoneDays] = useState<Record<number, boolean>>(initial?.doneDays ?? {});
   // Checklist per-sholat (key: "day:idx")
   const [doneSlots, setDoneSlots] = useState<Record<string, boolean>>(initial?.doneSlots ?? {});
+
+  const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({});
+
+  function toggleExpandDay(day: number) {
+    setExpandedDays((prev) => ({ ...prev, [day]: !prev[day] }));
+  }
 
   const plan = useMemo(() => {
     const safeDays = clampInt(Number(days), 1, 366);
@@ -304,6 +317,7 @@ export default function App() {
         prayersPerDay: prev?.prayersPerDay ?? prayersPerDay,
         allowUneven: prev?.allowUneven ?? allowUneven,
         khatamTimes: prev?.khatamTimes ?? khatamTimes,
+        prayerSlots: prev?.prayerSlots ?? prayerSlots,
       });
     } catch {
       // ignore
@@ -363,10 +377,10 @@ export default function App() {
       : plan.daysArr.filter((d) => !!doneDays[d.day]).length;
 
   const progressPct = Math.round((doneCount / Math.max(1, totalCount)) * 100);
-    const progressLabel =
-  mode === "per-prayer"
-    ? `${doneCount}/${totalCount} slot`
-    : `${doneCount}/${totalCount} hari`;
+  const progressLabel =
+    mode === "per-prayer"
+      ? `${doneCount}/${totalCount} slot`
+      : `${doneCount}/${totalCount} hari`;
 
 
   useEffect(() => {
@@ -377,17 +391,18 @@ export default function App() {
       totalPages,
       totalAyat,
       days,
-      mode,
-      prayersPerDay,
+      mode: effectiveMode,
+      prayersPerDay, // optional, boleh dihapus dari PersistedState
       allowUneven,
       khatamTimes,
+      prayerSlots,
     });
   }, [doneDays, doneSlots, unit, totalPages, totalAyat, days, mode, prayersPerDay, allowUneven, khatamTimes]);
 
   const summary = useMemo(() => {
     const safeDays = clampInt(Number(days), 1, 366);
     const safePrayers = clampInt(Number(prayersPerDay), 1, 10);
-    const slots = mode === "per-prayer" ? safeDays * safePrayers : safeDays;
+    const slots = effectiveMode === "per-prayer" ? safeDays * prayersPerDay : safeDays;
     const avgPerDay = total / safeDays;
     const avgPerSlot = total / slots;
     const safeKhatam = clampInt(Number(khatamTimes), 1, 1000);
@@ -505,33 +520,46 @@ export default function App() {
               </div>
 
               <div className="space-y-2">
-                <Label>Mode pembagian</Label>
-                <div className="flex items-center justify-between rounded-xl border p-3">
-                  <div className="space-y-0.5">
-                    <div className="text-sm font-medium">Per habis sholat</div>
-                    <div className="text-xs text-muted-foreground">Jika OFF: per hari</div>
-                  </div>
-                  <Switch
-                    checked={mode === "per-prayer"}
-                    onCheckedChange={(v) => setMode(v ? "per-prayer" : "per-day")}
-                    aria-label="Toggle mode"
-                  />
+                <Label>Slot bacaan (pilih sholat tertentu)</Label>
+
+                <CreatableSelect
+                  isMulti
+                  placeholder="Kosongkan untuk mode per hari…"
+                  value={prayerSlots.map((x) => ({ label: x, value: x }))}
+                  options={DEFAULT_PRAYER_OPTIONS.map((x) => ({ label: x, value: x }))}
+                  onChange={(items) => {
+                    const arr = (items ?? [])
+                      .map((it) => it.value.trim())
+                      .filter(Boolean);
+
+                    setPrayerSlots(arr);
+                    // jika arr kosong -> otomatis mode per-hari (via effectiveMode)
+                  }}
+                  formatCreateLabel={(input) => `Tambah "${input}"`}
+                />
+
+                <p className="text-xs text-muted-foreground">
+                  Pilih sholat yang ingin dipakai sebagai “slot bacaan”. Jika tidak memilih apa pun, pembagian otomatis menjadi <b>per hari</b>.
+                </p>
+
+                {/* shortcut button opsional */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setPrayerSlots(DEFAULT_PRAYER_OPTIONS)}
+                  >
+                    Pakai 5 sholat
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setPrayerSlots([])}
+                  >
+                    Mode per hari
+                  </Button>
                 </div>
               </div>
-
-              {mode === "per-prayer" && (
-                <div className="space-y-2">
-                  <Label>Jumlah sholat per hari</Label>
-                  <Input
-                    inputMode="numeric"
-                    value={prayersPerDayRaw}
-                    onChange={(e) => setPrayersPerDayRaw(e.target.value)}
-                    onBlur={() => setPrayersPerDayRaw(String(parseIntOrDefault(prayersPerDayRaw, DEFAULT_PRAYERS_PER_DAY, 1, 10)))}
-                  />
-
-                  <p className="text-xs text-muted-foreground">Default 5 (Subuh, Dzuhur, Ashar, Maghrib, Isya).</p>
-                </div>
-              )}
 
               <div className="flex items-center justify-between rounded-xl border p-3">
                 <div className="space-y-0.5">
@@ -654,24 +682,63 @@ export default function App() {
                       </div>
                     </div>
 
-                    {mode === "per-prayer" && (
-                      <div className="mt-3 grid gap-2 md:grid-cols-5">
-                        {d.slots.map((s, idx) => {
-                          const k = slotKey(d.day, idx);
-                          const checked = !!doneSlots[k];
+                    <>
+                      {/* Toggle hanya muncul di mobile */}
+                      <div className="mt-3 flex items-center justify-between md:hidden">
+                        <div className="text-xs text-muted-foreground">
+                          Rincian per sholat ({d.slots.length} slot)
+                        </div>
 
-                          return (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => toggleExpandDay(d.day)}
+                        >
+                          {expandedDays[d.day] ? "Collapse" : "Expand"}
+                        </Button>
+                      </div>
+
+                      {/* Desktop: selalu tampil */}
+                      <div className="mt-3 hidden md:grid gap-2 md:grid-cols-5">
+                        {d.slots.map((s, idx) => (
+                          <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="text-xs font-medium text-muted-foreground">
+                                {prayerName(idx)}
+                              </div>
+
+                              <Checkbox
+                                checked={!!doneSlots[slotKey(d.day, idx)]}
+                                onCheckedChange={() => toggleSlot(d.day, idx)}
+                                aria-label={`Selesai ${prayerName(idx)} hari ${d.day}`}
+                              />
+                            </div>
+
+                            <div className="mt-1 text-sm font-semibold">
+                              {s.start != null && s.end != null ? formatWrappedRange(s.start, s.end, baseTotal) : "—"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {s.size} {unitLabel}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Mobile: tampil hanya kalau expanded */}
+                      {expandedDays[d.day] && (
+                        <div className="mt-3 grid gap-2 md:hidden grid-cols-2">
+                          {d.slots.map((s, idx) => (
                             <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
-                              <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-start justify-between gap-2">
                                 <div className="text-xs font-medium text-muted-foreground">
                                   {prayerName(idx)}
                                 </div>
 
-                                {/* Checkbox per-sholat */}
                                 <Checkbox
-                                  checked={checked}
+                                  checked={!!doneSlots[slotKey(d.day, idx)]}
                                   onCheckedChange={() => toggleSlot(d.day, idx)}
-                                  aria-label={`Checklist ${prayerName(idx)} hari ${d.day}`}
+                                  aria-label={`Selesai ${prayerName(idx)} hari ${d.day}`}
                                 />
                               </div>
 
@@ -682,10 +749,11 @@ export default function App() {
                                 {s.size} {unitLabel}
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      )}
+                    </>
+
                   </div>
                 );
               })}
@@ -714,14 +782,14 @@ export default function App() {
       <div className="fixed left-[-99999px] top-0 opacity-0 pointer-events-none">
         <div ref={shareRef}>
           <ShareCard
-  title="Target khatam"
-  subtitle={mode === "per-prayer" ? "Mode: per habis sholat" : "Mode: per hari"}
-  summary={`Total: ${total} ${unitLabel} • Periode: ${summary.safeDays} hari • Target: ${summary.safeKhatam}x`}
-  url="quran-khotmer.vercel.app"
-  accentHex={accentHex}          // pastikan kamu punya state hex dari color picker
-  progressPct={progressPct}
-  progressLabel={progressLabel}
-/>
+            title="Target khatam"
+            subtitle={mode === "per-prayer" ? "Mode: per habis sholat" : "Mode: per hari"}
+            summary={`Total: ${total} ${unitLabel} • Periode: ${summary.safeDays} hari • Target: ${summary.safeKhatam}x`}
+            url="quran-khotmer.vercel.app"
+            accentHex={accentHex}          // pastikan kamu punya state hex dari color picker
+            progressPct={progressPct}
+            progressLabel={progressLabel}
+          />
         </div>
       </div>
 
