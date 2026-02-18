@@ -11,6 +11,9 @@ import { Progress } from "@/components/ui/progress";
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "./useTheme";
 import { useAccentOklch } from "./useAccentOklch";
+import { toPng } from "html-to-image";
+import { useRef } from "react";
+import { ShareCard } from "@/components/ui/ShareCard"
 
 // Quran Khatam Separator (simple)
 // - Supports splitting by pages (default 604) or ayat (custom total)
@@ -307,6 +310,47 @@ export default function App() {
     }
   }
 
+  const shareRef = useRef<HTMLDivElement | null>(null);
+
+  async function onShareImage() {
+    try {
+      if (!shareRef.current) return;
+
+      // bikin PNG dari DOM
+      const dataUrl = await toPng(shareRef.current, {
+        cacheBust: true,
+        pixelRatio: 2, // biar tajam
+        backgroundColor: "transparent",
+      });
+
+      // convert dataUrl -> Blob -> File
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], "quran-khotmer.png", { type: "image/png" });
+
+      const shareData: ShareData = {
+        title: "quran-khotmer",
+        text: "Target khatam jadi kebagi rapi",
+        files: [file],
+      };
+
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      // fallback: download
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = "quran-khotmer.png";
+      a.click();
+    } catch (e) {
+      console.error(e);
+      alert("Gagal membuat gambar share. Coba lagi.");
+    }
+  }
+
+
   // Progress: jika per-sholat, hitung slot; jika per-hari, hitung hari
   const totalCount =
     mode === "per-prayer"
@@ -319,6 +363,11 @@ export default function App() {
       : plan.daysArr.filter((d) => !!doneDays[d.day]).length;
 
   const progressPct = Math.round((doneCount / Math.max(1, totalCount)) * 100);
+    const progressLabel =
+  mode === "per-prayer"
+    ? `${doneCount}/${totalCount} slot`
+    : `${doneCount}/${totalCount} hari`;
+
 
   useEffect(() => {
     saveState({
@@ -518,6 +567,7 @@ export default function App() {
                   {allowUneven && plan.remainder ? `, +1 untuk ${plan.remainder} slot awal` : ""}.
                 </div>
               </div>
+              <Button onClick={onShareImage}>Share as Image</Button>
             </CardContent>
           </Card>
 
@@ -660,6 +710,21 @@ export default function App() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="fixed left-[-99999px] top-0 opacity-0 pointer-events-none">
+        <div ref={shareRef}>
+          <ShareCard
+  title="Target khatam"
+  subtitle={mode === "per-prayer" ? "Mode: per habis sholat" : "Mode: per hari"}
+  summary={`Total: ${total} ${unitLabel} • Periode: ${summary.safeDays} hari • Target: ${summary.safeKhatam}x`}
+  url="quran-khotmer.vercel.app"
+  accentHex={accentHex}          // pastikan kamu punya state hex dari color picker
+  progressPct={progressPct}
+  progressLabel={progressLabel}
+/>
+        </div>
+      </div>
+
     </div>
   );
 }
