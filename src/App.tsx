@@ -17,8 +17,12 @@ import { useEffect, useMemo, useState } from "react";
 
 const STORAGE_KEY = "quran-khotmer:v1";
 
+type Unit = "pages" | "ayat";
+type Mode = "per-day" | "per-prayer";
+
 type PersistedState = {
   doneDays: Record<number, boolean>;
+  doneSlots: Record<string, boolean>; // <-- NEW: checklist per-sholat (key: "day:idx")
   unit: Unit;
   totalPages: number;
   totalAyat: number;
@@ -46,9 +50,6 @@ function saveState(state: PersistedState) {
     // ignore (quota/private mode)
   }
 }
-
-type Unit = "pages" | "ayat";
-type Mode = "per-day" | "per-prayer";
 
 const DEFAULT_TOTAL_PAGES = 604;
 const DEFAULT_PRAYERS_PER_DAY = 5;
@@ -146,7 +147,6 @@ function buildDailyPlan({
   if (mode === "per-day") {
     for (let d = 0; d < days; d++) {
       const s = slots[d];
-      // s should exist because totalSlots === days here, but keep safe defaults
       daysArr.push({
         day: d + 1,
         slots: s ? [s] : [],
@@ -177,9 +177,7 @@ function prayerName(i: number): string {
 }
 
 export default function App() {
-
   const initial = loadState();
-
 
   const [unit, setUnit] = useState<Unit>(initial?.unit ?? "pages");
   const [totalPages, setTotalPages] = useState<number>(initial?.totalPages ?? DEFAULT_TOTAL_PAGES);
@@ -195,23 +193,10 @@ export default function App() {
   const total = baseTotal * clampInt(Number(khatamTimes), 1, 1000);
   const unitLabel = unit === "pages" ? "halaman" : "ayat";
 
-  // Checklist
+  // Checklist per-hari
   const [doneDays, setDoneDays] = useState<Record<number, boolean>>(initial?.doneDays ?? {});
-
-  useEffect(() => {
-    saveState({
-      doneDays,
-      unit,
-      totalPages,
-      totalAyat,
-      days,
-      mode,
-      prayersPerDay,
-      allowUneven,
-      khatamTimes,
-    });
-  }, [doneDays, unit, totalPages, totalAyat, days, mode, prayersPerDay, allowUneven, khatamTimes]);
-
+  // Checklist per-sholat (key: "day:idx")
+  const [doneSlots, setDoneSlots] = useState<Record<string, boolean>>(initial?.doneSlots ?? {});
 
   const plan = useMemo(() => {
     const safeDays = clampInt(Number(days), 1, 366);
@@ -227,22 +212,45 @@ export default function App() {
     });
   }, [total, days, mode, prayersPerDay, unitLabel, allowUneven]);
 
-  // Checklist state per day
-  // const [doneDays, setDoneDays] = useState<Record<number, boolean>>({});
-  const doneCount = Object.values(doneDays).filter(Boolean).length;
-  const progressPct = Math.round((doneCount / Math.max(1, plan.daysArr.length)) * 100);
+  // key helper untuk per-sholat
+  const slotKey = (day: number, idx: number) => `${day}:${idx}`;
 
   function toggleDay(day: number): void {
     setDoneDays((prev) => ({ ...prev, [day]: !prev[day] }));
   }
 
+  function toggleSlot(day: number, idx: number): void {
+    const k = slotKey(day, idx);
+    setDoneSlots((prev) => ({ ...prev, [k]: !prev[k] }));
+  }
+
+  function setAllSlotsForDay(day: number, value: boolean): void {
+    setDoneSlots((prev) => {
+      const next = { ...prev };
+      // gunakan d.slots.length (bukan prayersPerDay) supaya sesuai plan saat slot terakhir kosong dll.
+      const dayPlan = plan.daysArr.find((x) => x.day === day);
+      const count = dayPlan?.slots.length ?? prayersPerDay;
+      for (let idx = 0; idx < count; idx++) {
+        next[slotKey(day, idx)] = value;
+      }
+      return next;
+    });
+  }
+
+  function isDayAllSlotsDone(d: DayPlan): boolean {
+    if (mode !== "per-prayer") return false;
+    if (!d.slots.length) return false;
+    return d.slots.every((_, idx) => !!doneSlots[slotKey(d.day, idx)]);
+  }
+
   function resetChecklist(): void {
     setDoneDays({});
+    setDoneSlots({});
     try {
       const prev = loadState();
-      // tetap simpan setting input, cuma checklist yang dihapus
       saveState({
         doneDays: {},
+        doneSlots: {},
         unit: prev?.unit ?? unit,
         totalPages: prev?.totalPages ?? totalPages,
         totalAyat: prev?.totalAyat ?? totalAyat,
@@ -256,6 +264,34 @@ export default function App() {
       // ignore
     }
   }
+
+  // Progress: jika per-sholat, hitung slot; jika per-hari, hitung hari
+  const totalCount =
+    mode === "per-prayer"
+      ? plan.daysArr.reduce((acc, d) => acc + d.slots.length, 0)
+      : plan.daysArr.length;
+
+  const doneCount =
+    mode === "per-prayer"
+      ? plan.daysArr.reduce((acc, d) => acc + d.slots.filter((_, idx) => !!doneSlots[slotKey(d.day, idx)]).length, 0)
+      : plan.daysArr.filter((d) => !!doneDays[d.day]).length;
+
+  const progressPct = Math.round((doneCount / Math.max(1, totalCount)) * 100);
+
+  useEffect(() => {
+    saveState({
+      doneDays,
+      doneSlots,
+      unit,
+      totalPages,
+      totalAyat,
+      days,
+      mode,
+      prayersPerDay,
+      allowUneven,
+      khatamTimes,
+    });
+  }, [doneDays, doneSlots, unit, totalPages, totalAyat, days, mode, prayersPerDay, allowUneven, khatamTimes]);
 
   const summary = useMemo(() => {
     const safeDays = clampInt(Number(days), 1, 366);
@@ -318,7 +354,11 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Periode (hari)</Label>
-                  <Input type="number" value={days} onChange={(e) => setDays(clampInt(Number(e.target.value), 1, 366))} />
+                  <Input
+                    type="number"
+                    value={days}
+                    onChange={(e) => setDays(clampInt(Number(e.target.value), 1, 366))}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Target khatam (kali)</Label>
@@ -327,9 +367,7 @@ export default function App() {
                     value={khatamTimes}
                     onChange={(e) => setKhatamTimes(clampInt(Number(e.target.value), 1, 1000))}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Misal 3 = target khatam 3x dalam periode yang kamu set.
-                  </p>
+                  <p className="text-xs text-muted-foreground">Misal 3 = target khatam 3x dalam periode yang kamu set.</p>
                 </div>
               </div>
 
@@ -404,9 +442,9 @@ export default function App() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <div className="text-sm font-medium">Progress hari selesai</div>
+                  <div className="text-sm font-medium">Progress selesai</div>
                   <div className="text-xs text-muted-foreground">
-                    {doneCount} / {plan.daysArr.length} hari
+                    {doneCount} / {totalCount} {mode === "per-prayer" ? "slot" : "hari"}
                   </div>
                 </div>
                 <div className="text-sm font-semibold">{progressPct}%</div>
@@ -418,7 +456,7 @@ export default function App() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Catatan: checklist ini hanya tersimpan selama halaman tidak di-refresh (sederhana). Kalau mau disimpan permanen, bisa ditambah localStorage.
+                Catatan: sekarang checklist tersimpan di localStorage, jadi tidak hilang saat refresh.
               </p>
             </CardContent>
           </Card>
@@ -433,50 +471,88 @@ export default function App() {
               </p>
             </div>
           </CardHeader>
+
           <CardContent>
             <div className="grid gap-3">
-              {plan.daysArr.map((d) => (
-                <div key={d.day} className="rounded-2xl border p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <Checkbox checked={!!doneDays[d.day]} onCheckedChange={() => toggleDay(d.day)} id={`day-${d.day}`} />
-                      <Label htmlFor={`day-${d.day}`} className="cursor-pointer">
-                        <span className="font-semibold">Hari {d.day}</span>
-                        {d.start && d.end ? (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            — {formatRange(d.start, d.end)} ({d.totalThisDay} {unitLabel})
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground"> — selesai</span>
-                        )}
-                      </Label>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">
-                        {d.totalThisDay} {unitLabel}/hari
-                      </Badge>
-                      {mode === "per-prayer" && <Badge variant="secondary">{plan.base} {unitLabel}/slot</Badge>}
-                    </div>
-                  </div>
+              {plan.daysArr.map((d) => {
+                const dayAllDone = isDayAllSlotsDone(d);
+                const dayChecked = mode === "per-prayer" ? dayAllDone : !!doneDays[d.day];
 
-                  {mode === "per-prayer" && (
-                    <div className="mt-3 grid gap-2 md:grid-cols-5">
-                      {d.slots.map((s, idx) => (
-                        <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
-                          <div className="text-xs font-medium text-muted-foreground">{prayerName(idx)}</div>
-                          <div className="mt-1 text-sm font-semibold">
-                            {s.start != null && s.end != null ? formatRange(s.start, s.end) : "—"}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {s.size} {unitLabel}
-                          </div>
-                        </div>
-                      ))}
+                return (
+                  <div key={d.day} className="rounded-2xl border p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          checked={dayChecked}
+                          onCheckedChange={() => {
+                            if (mode === "per-prayer") {
+                              setAllSlotsForDay(d.day, !dayChecked);
+                            } else {
+                              toggleDay(d.day);
+                            }
+                          }}
+                          id={`day-${d.day}`}
+                        />
+                        <Label htmlFor={`day-${d.day}`} className="cursor-pointer">
+                          <span className="font-semibold">Hari {d.day}</span>
+                          {d.start && d.end ? (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              — {formatRange(d.start, d.end)} ({d.totalThisDay} {unitLabel})
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground"> — selesai</span>
+                          )}
+                        </Label>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline">
+                          {d.totalThisDay} {unitLabel}/hari
+                        </Badge>
+                        {mode === "per-prayer" && (
+                          <Badge variant="secondary">
+                            {plan.base} {unitLabel}/slot
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {mode === "per-prayer" && (
+                      <div className="mt-3 grid gap-2 md:grid-cols-5">
+                        {d.slots.map((s, idx) => {
+                          const k = slotKey(d.day, idx);
+                          const checked = !!doneSlots[k];
+
+                          return (
+                            <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs font-medium text-muted-foreground">
+                                  {prayerName(idx)}
+                                </div>
+
+                                {/* Checkbox per-sholat */}
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={() => toggleSlot(d.day, idx)}
+                                  aria-label={`Checklist ${prayerName(idx)} hari ${d.day}`}
+                                />
+                              </div>
+
+                              <div className="mt-1 text-sm font-semibold">
+                                {s.start != null && s.end != null ? formatRange(s.start, s.end) : "—"}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {s.size} {unitLabel}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
