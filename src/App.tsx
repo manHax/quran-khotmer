@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +8,44 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useEffect, useMemo, useState } from "react";
 
 // Quran Khatam Separator (simple)
 // - Supports splitting by pages (default 604) or ayat (custom total)
 // - Targets: per day or per prayer (5 daily prayers)
 // - Produces day-by-day ranges and optional prayer-by-prayer breakdown
+
+const STORAGE_KEY = "quran-khotmer:v1";
+
+type PersistedState = {
+  doneDays: Record<number, boolean>;
+  unit: Unit;
+  totalPages: number;
+  totalAyat: number;
+  days: number;
+  mode: Mode;
+  prayersPerDay: number;
+  allowUneven: boolean;
+  khatamTimes: number;
+};
+
+function loadState(): PersistedState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedState;
+  } catch {
+    return null;
+  }
+}
+
+function saveState(state: PersistedState) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore (quota/private mode)
+  }
+}
 
 type Unit = "pages" | "ayat";
 type Mode = "per-day" | "per-prayer";
@@ -145,19 +177,41 @@ function prayerName(i: number): string {
 }
 
 export default function App() {
-  const [unit, setUnit] = useState<Unit>("pages"); // 'pages' | 'ayat'
-  const [totalPages, setTotalPages] = useState<number>(DEFAULT_TOTAL_PAGES);
-  const [totalAyat, setTotalAyat] = useState<number>(6236); // common count; user can change
 
-  const [days, setDays] = useState<number>(29); // Ramadan-style default
-  const [mode, setMode] = useState<Mode>("per-prayer"); // 'per-day' | 'per-prayer'
-  const [prayersPerDay, setPrayersPerDay] = useState<number>(DEFAULT_PRAYERS_PER_DAY);
-  const [allowUneven, setAllowUneven] = useState<boolean>(true);
-  const [khatamTimes, setKhatamTimes] = useState<number>(1); // target khatam berapa kali
+  const initial = loadState();
+
+
+  const [unit, setUnit] = useState<Unit>(initial?.unit ?? "pages");
+  const [totalPages, setTotalPages] = useState<number>(initial?.totalPages ?? DEFAULT_TOTAL_PAGES);
+  const [totalAyat, setTotalAyat] = useState<number>(initial?.totalAyat ?? 6236);
+
+  const [days, setDays] = useState<number>(initial?.days ?? 29);
+  const [mode, setMode] = useState<Mode>(initial?.mode ?? "per-prayer");
+  const [prayersPerDay, setPrayersPerDay] = useState<number>(initial?.prayersPerDay ?? DEFAULT_PRAYERS_PER_DAY);
+  const [allowUneven, setAllowUneven] = useState<boolean>(initial?.allowUneven ?? true);
+  const [khatamTimes, setKhatamTimes] = useState<number>(initial?.khatamTimes ?? 1);
 
   const baseTotal = unit === "pages" ? totalPages : totalAyat;
   const total = baseTotal * clampInt(Number(khatamTimes), 1, 1000);
   const unitLabel = unit === "pages" ? "halaman" : "ayat";
+
+  // Checklist
+  const [doneDays, setDoneDays] = useState<Record<number, boolean>>(initial?.doneDays ?? {});
+
+  useEffect(() => {
+    saveState({
+      doneDays,
+      unit,
+      totalPages,
+      totalAyat,
+      days,
+      mode,
+      prayersPerDay,
+      allowUneven,
+      khatamTimes,
+    });
+  }, [doneDays, unit, totalPages, totalAyat, days, mode, prayersPerDay, allowUneven, khatamTimes]);
+
 
   const plan = useMemo(() => {
     const safeDays = clampInt(Number(days), 1, 366);
@@ -174,7 +228,7 @@ export default function App() {
   }, [total, days, mode, prayersPerDay, unitLabel, allowUneven]);
 
   // Checklist state per day
-  const [doneDays, setDoneDays] = useState<Record<number, boolean>>({});
+  // const [doneDays, setDoneDays] = useState<Record<number, boolean>>({});
   const doneCount = Object.values(doneDays).filter(Boolean).length;
   const progressPct = Math.round((doneCount / Math.max(1, plan.daysArr.length)) * 100);
 
@@ -184,6 +238,23 @@ export default function App() {
 
   function resetChecklist(): void {
     setDoneDays({});
+    try {
+      const prev = loadState();
+      // tetap simpan setting input, cuma checklist yang dihapus
+      saveState({
+        doneDays: {},
+        unit: prev?.unit ?? unit,
+        totalPages: prev?.totalPages ?? totalPages,
+        totalAyat: prev?.totalAyat ?? totalAyat,
+        days: prev?.days ?? days,
+        mode: prev?.mode ?? mode,
+        prayersPerDay: prev?.prayersPerDay ?? prayersPerDay,
+        allowUneven: prev?.allowUneven ?? allowUneven,
+        khatamTimes: prev?.khatamTimes ?? khatamTimes,
+      });
+    } catch {
+      // ignore
+    }
   }
 
   const summary = useMemo(() => {
