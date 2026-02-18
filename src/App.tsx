@@ -9,6 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useEffect, useMemo, useState } from "react";
+import { useTheme } from "./useTheme";
+import { useAccentOklch } from "./useAccentOklch";
 
 // Quran Khatam Separator (simple)
 // - Supports splitting by pages (default 604) or ayat (custom total)
@@ -190,6 +192,10 @@ function prayerName(i: number): string {
 }
 
 export default function App() {
+  const { mode: themeMode, setMode: setThemeMode } = useTheme();
+  const { hex: accentHex, setHex: setAccentHex, reset: resetAccent } = useAccentOklch();
+
+
   const initial = loadState();
 
   const [unit, setUnit] = useState<Unit>(initial?.unit ?? "pages");
@@ -345,6 +351,36 @@ export default function App() {
 
         <div className="grid gap-6 md:grid-cols-2">
           <Card className="rounded-2xl shadow-sm">
+            <CardHeader>
+              <Tabs value={themeMode} onValueChange={(v) => setThemeMode(v as any)}>
+                <TabsList className="grid grid-cols-3">
+                  <TabsTrigger value="light">Light</TabsTrigger>
+                  <TabsTrigger value="dark">Dark</TabsTrigger>
+                  <TabsTrigger value="system">System</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="flex items-center justify-between rounded-xl border p-3">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">Accent color</div>
+                  <div className="text-xs text-muted-foreground">{accentHex.toUpperCase()}</div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={accentHex}
+                    onChange={(e) => setAccentHex(e.target.value)}
+                    aria-label="Pick accent color"
+                    className="h-9 w-12 cursor-pointer rounded-md border bg-transparent p-1"
+                  />
+                  <Button variant="secondary" onClick={resetAccent}>
+                    Reset
+                  </Button>
+                </div>
+              </div>
+
+
+            </CardHeader>
             <CardHeader>
               <CardTitle>Input Target</CardTitle>
             </CardHeader>
