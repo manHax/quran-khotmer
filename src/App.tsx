@@ -15,6 +15,11 @@ import { toPng } from "html-to-image";
 import { useRef } from "react";
 import { ShareCard } from "@/components/ui/ShareCard"
 import CreatableSelect from "react-select/creatable";
+import { addDays, differenceInCalendarDays, format } from "date-fns";
+import type { DateRange } from "react-day-picker";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
 
 // Quran Khatam Separator (simple)
 // - Supports splitting by pages (default 604) or ayat (custom total)
@@ -40,6 +45,8 @@ type PersistedState = {
   allowUneven: boolean;
   khatamTimes: number;
   prayerSlots: string[];
+  dateFrom?: string; // ISO
+  dateTo?: string;   // ISO
 };
 
 function loadState(): PersistedState | null {
@@ -228,12 +235,29 @@ export default function App() {
 
   const [totalPagesRaw, setTotalPagesRaw] = useState<string>(String(initial?.totalPages ?? DEFAULT_TOTAL_PAGES));
   const [totalAyatRaw, setTotalAyatRaw] = useState<string>(String(initial?.totalAyat ?? 6236));
-  const [daysRaw, setDaysRaw] = useState<string>(String(initial?.days ?? 29));
+  // const [daysRaw, setDaysRaw] = useState<string>(String(initial?.days ?? 29));
   const [khatamTimesRaw, setKhatamTimesRaw] = useState<string>(String(initial?.khatamTimes ?? 1));
+
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const from = initial?.dateFrom ? new Date(initial.dateFrom) : new Date();
+    const to = initial?.dateTo ? new Date(initial.dateTo) : addDays(from, 28);
+    return { from, to };
+  });
+
+  // derive days (inclusive)
+  const days = useMemo(() => {
+    const from = dateRange?.from;
+    const to = dateRange?.to;
+    if (!from || !to) return 1; // sementara kalau belum lengkap
+    const diff = differenceInCalendarDays(to, from) + 1; // inclusive
+    return Math.max(1, diff);
+  }, [dateRange]);
+
+
 
   const totalPages = parseIntOrDefault(totalPagesRaw, DEFAULT_TOTAL_PAGES, 1, 1_000_000);
   const totalAyat = parseIntOrDefault(totalAyatRaw, 6236, 1, 1_000_000);
-  const days = parseIntOrDefault(daysRaw, 29, 1, 366);
+  // const days = parseIntOrDefault(daysRaw, 29, 1, 366);
   const khatamTimes = parseIntOrDefault(khatamTimesRaw, 1, 1, 1000);
   const mode: Mode = prayerSlots.length > 0 ? "per-prayer" : "per-day";
   const prayersPerDay = Math.max(1, prayerSlots.length);
@@ -317,6 +341,8 @@ export default function App() {
         allowUneven: prev?.allowUneven ?? allowUneven,
         khatamTimes: prev?.khatamTimes ?? khatamTimes,
         prayerSlots: prev?.prayerSlots ?? prayerSlots,
+        dateFrom: dateRange?.from ? dateRange.from.toISOString() : "",
+        dateTo: dateRange?.to ? dateRange.to.toISOString() : "",
       });
     } catch {
       // ignore
@@ -424,7 +450,7 @@ export default function App() {
       avgPerSlot,
       safeKhatam,
     };
-  },[days, prayersPerDay, mode, total, khatamTimes]);
+  }, [days, prayersPerDay, mode, total, khatamTimes]);
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -505,29 +531,58 @@ export default function App() {
                 </TabsContent>
               </Tabs>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Periode (hari)</Label>
-                  <Input
-                    inputMode="numeric"
-                    value={daysRaw}
-                    onChange={(e) => setDaysRaw(e.target.value)}
-                    onBlur={() => setDaysRaw(String(parseIntOrDefault(daysRaw, 29, 1, 366)))}
-                  />
+              <div className="grid gap-3 md:grid-cols-2">
+                {/* Date range: full width */}
+                <div className="md:col-span-2 space-y-2">
+                  <Label>Periode (range tanggal)</Label>
 
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-start">
+                        {dateRange?.from ? (
+                          dateRange.to ? (
+                            <>
+                              {format(dateRange.from, "dd MMM yyyy")} — {format(dateRange.to, "dd MMM yyyy")}
+                              <span className="ml-auto text-muted-foreground">{days} hari</span>
+                            </>
+                          ) : (
+                            <>
+                              {format(dateRange.from, "dd MMM yyyy")} — pilih tanggal selesai
+                            </>
+                          )
+                        ) : (
+                          <>Pilih tanggal mulai & selesai</>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="range"
+                        selected={dateRange}
+                        onSelect={setDateRange}
+                        numberOfMonths={1}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
+
+                {/* Target khatam */}
                 <div className="space-y-2">
                   <Label>Target khatam (kali)</Label>
                   <Input
-                    inputMode="numeric"
-                    value={khatamTimesRaw}
-                    onChange={(e) => setKhatamTimesRaw(e.target.value)}
-                    onBlur={() => setKhatamTimesRaw(String(parseIntOrDefault(khatamTimesRaw, 1, 1, 1000)))}
+                    type="number"
+                    value={khatamTimes}
+                    onChange={(e) => setKhatamTimes(clampInt(Number(e.target.value), 1, 1000))}
                   />
-
                   <p className="text-xs text-muted-foreground">Misal 3 = target khatam 3x dalam periode yang kamu set.</p>
                 </div>
+
+                {/* (Optional) kalau kamu mau taruh setting lain di sebelah kanan */}
+                {/* <div className="space-y-2"> ... </div> */}
               </div>
+
 
               <div className="space-y-2">
                 <Label>Slot bacaan (pilih sholat tertentu)</Label>
@@ -537,16 +592,16 @@ export default function App() {
                   placeholder="Kosongkan untuk mode per hari…"
                   value={prayerSlots.map((x) => ({ label: x, value: x }))}
                   options={DEFAULT_PRAYER_OPTIONS.map((x) => ({ label: x, value: x }))}
-                 onChange={(items) => {
-  const arr = (items ?? [])
-    .map((it) => it.value.trim())
-    .filter(Boolean);
+                  onChange={(items) => {
+                    const arr = (items ?? [])
+                      .map((it) => it.value.trim())
+                      .filter(Boolean);
 
-  setPrayerSlots(arr);
+                    setPrayerSlots(arr);
 
-  // optional: kalau list kosong, collapse semua
-  if (arr.length === 0) setExpandedDays({});
-}}
+                    // optional: kalau list kosong, collapse semua
+                    if (arr.length === 0) setExpandedDays({});
+                  }}
                   formatCreateLabel={(input) => `Tambah "${input}"`}
                 />
 
@@ -695,78 +750,78 @@ export default function App() {
                     </div>
 
                     {mode === "per-prayer" && prayerSlots.length > 0 && (
-  <>
-    {/* Toggle hanya muncul di mobile */}
-    <div className="mt-3 flex items-center justify-between md:hidden">
-      <div className="text-xs text-muted-foreground">
-        Rincian per sholat ({d.slots.length} slot)
-      </div>
+                      <>
+                        {/* Toggle hanya muncul di mobile */}
+                        <div className="mt-3 flex items-center justify-between md:hidden">
+                          <div className="text-xs text-muted-foreground">
+                            Rincian per sholat ({d.slots.length} slot)
+                          </div>
 
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        onClick={() => toggleExpandDay(d.day)}
-      >
-        {expandedDays[d.day] ? "Collapse" : "Expand"}
-      </Button>
-    </div>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => toggleExpandDay(d.day)}
+                          >
+                            {expandedDays[d.day] ? "Collapse" : "Expand"}
+                          </Button>
+                        </div>
 
-    {/* Desktop: selalu tampil */}
-    <div className="mt-3 hidden md:grid gap-2 md:grid-cols-5">
-      {d.slots.map((s, idx) => (
-        <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-xs font-medium text-muted-foreground">
-              {prayerSlots[idx] ?? prayerName(idx)}
-            </div>
+                        {/* Desktop: selalu tampil */}
+                        <div className="mt-3 hidden md:grid gap-2 md:grid-cols-5">
+                          {d.slots.map((s, idx) => (
+                            <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="text-xs font-medium text-muted-foreground">
+                                  {prayerSlots[idx] ?? prayerName(idx)}
+                                </div>
 
-            <Checkbox
-              checked={!!doneSlots[slotKey(d.day, idx)]}
-              onCheckedChange={() => toggleSlot(d.day, idx)}
-              aria-label={`Selesai ${prayerSlots[idx] ?? prayerName(idx)} hari ${d.day}`}
-            />
-          </div>
+                                <Checkbox
+                                  checked={!!doneSlots[slotKey(d.day, idx)]}
+                                  onCheckedChange={() => toggleSlot(d.day, idx)}
+                                  aria-label={`Selesai ${prayerSlots[idx] ?? prayerName(idx)} hari ${d.day}`}
+                                />
+                              </div>
 
-          <div className="mt-1 text-sm font-semibold">
-            {s.start != null && s.end != null ? formatWrappedRange(s.start, s.end, baseTotal) : "—"}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {s.size} {unitLabel}
-          </div>
-        </div>
-      ))}
-    </div>
+                              <div className="mt-1 text-sm font-semibold">
+                                {s.start != null && s.end != null ? formatWrappedRange(s.start, s.end, baseTotal) : "—"}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {s.size} {unitLabel}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
 
-    {/* Mobile: tampil hanya kalau expanded */}
-    {expandedDays[d.day] && (
-      <div className="mt-3 grid gap-2 md:hidden grid-cols-2">
-        {d.slots.map((s, idx) => (
-          <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="text-xs font-medium text-muted-foreground">
-                {prayerSlots[idx] ?? prayerName(idx)}
-              </div>
+                        {/* Mobile: tampil hanya kalau expanded */}
+                        {expandedDays[d.day] && (
+                          <div className="mt-3 grid gap-2 md:hidden grid-cols-2">
+                            {d.slots.map((s, idx) => (
+                              <div key={s.idx} className="rounded-xl bg-muted/40 p-3">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="text-xs font-medium text-muted-foreground">
+                                    {prayerSlots[idx] ?? prayerName(idx)}
+                                  </div>
 
-              <Checkbox
-                checked={!!doneSlots[slotKey(d.day, idx)]}
-                onCheckedChange={() => toggleSlot(d.day, idx)}
-                aria-label={`Selesai ${prayerSlots[idx] ?? prayerName(idx)} hari ${d.day}`}
-              />
-            </div>
+                                  <Checkbox
+                                    checked={!!doneSlots[slotKey(d.day, idx)]}
+                                    onCheckedChange={() => toggleSlot(d.day, idx)}
+                                    aria-label={`Selesai ${prayerSlots[idx] ?? prayerName(idx)} hari ${d.day}`}
+                                  />
+                                </div>
 
-            <div className="mt-1 text-sm font-semibold">
-              {s.start != null && s.end != null ? formatWrappedRange(s.start, s.end, baseTotal) : "—"}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {s.size} {unitLabel}
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </>
-)}
+                                <div className="mt-1 text-sm font-semibold">
+                                  {s.start != null && s.end != null ? formatWrappedRange(s.start, s.end, baseTotal) : "—"}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {s.size} {unitLabel}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
 
 
                   </div>
