@@ -572,9 +572,10 @@ export default function App() {
                 <div className="space-y-2">
                   <Label>Target khatam (kali)</Label>
                   <Input
-                    type="number"
-                    value={khatamTimes}
-                    onChange={(e) => setKhatamTimes(clampInt(Number(e.target.value), 1, 1000))}
+                    inputMode="numeric"
+                    value={khatamTimesRaw}
+                    onChange={(e) => setKhatamTimesRaw(e.target.value)}
+                    onBlur={() => setKhatamTimesRaw(String(parseIntOrDefault(khatamTimesRaw, 1, 1, 1000)))}
                   />
                   <p className="text-xs text-muted-foreground">Misal 3 = target khatam 3x dalam periode yang kamu set.</p>
                 </div>
