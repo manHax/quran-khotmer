@@ -19,6 +19,7 @@ import { addDays, differenceInCalendarDays, format } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import QuranReader from "./QuranReader";
 
 
 // Quran Khatam Separator (simple)
@@ -253,6 +254,7 @@ export default function App() {
     return Math.max(1, diff);
   }, [dateRange]);
 
+  const [showPageReader, setShowPageReader] = useState(true);
 
 
   const totalPages = parseIntOrDefault(totalPagesRaw, DEFAULT_TOTAL_PAGES, 1, 1_000_000);
@@ -463,6 +465,7 @@ export default function App() {
             <span className="font-medium">halaman</span> atau <span className="font-medium">ayat</span>.
           </p>
         </div>
+        {/* <QuranReader /> */}
 
         <div className="grid gap-6 md:grid-cols-2">
           <Card className="rounded-2xl shadow-sm">
@@ -663,7 +666,19 @@ export default function App() {
                   {allowUneven && plan.remainder ? `, +1 untuk ${plan.remainder} slot awal` : ""}.
                 </div>
               </div>
-              <Button onClick={onShareImage}>Share as Image</Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={onShareImage}>
+                  Share Image
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowPageReader((v) => !v)}
+                >
+                  {showPageReader ? "Hide Page Reader" : "Show Page Reader"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -693,6 +708,10 @@ export default function App() {
             </CardContent>
           </Card>
         </div>
+
+        {showPageReader && (
+          <QuranReader />
+        )}
 
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>

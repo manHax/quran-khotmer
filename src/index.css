@@ -122,3 +122,36 @@
     @apply bg-background text-foreground;
     }
 }
+
+@font-face {
+  font-family: "QuranMadina";
+  src: url("/fonts/QPC.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* class util */
+/* .font-quran {
+  font-family: "QuranMadina", serif;
+} */
+
+/* Default Arabic font (pilih salah satu jadi utama) */
+.font-quran {
+  font-family: "Noto Naskh Arabic", "Amiri", "Scheherazade New", serif;
+}
+
+.quran-ar {
+  direction: rtl;
+  unicode-bidi: isolate;
+  text-align: right;
+
+  font-size: 28px;      /* 28–34 enak */
+  line-height: 2.1;     /* ini bikin “lega” */
+  word-spacing: 0.06em;
+
+  font-variant-ligatures: normal;
+  font-feature-settings: "liga" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
