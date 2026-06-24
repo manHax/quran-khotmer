@@ -20,6 +20,7 @@ import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import QuranReader from "./QuranReader";
+import PrayerTimes from "./components/PrayerTimes";
 
 
 // Quran Khatam Separator (simple)
@@ -255,6 +256,7 @@ export default function App() {
   }, [dateRange]);
 
   const [showPageReader, setShowPageReader] = useState(true);
+  const [showPrayerTimes, setShowPrayerTimes] = useState(true);
 
 
   const totalPages = parseIntOrDefault(totalPagesRaw, DEFAULT_TOTAL_PAGES, 1, 1_000_000);
@@ -678,6 +680,14 @@ export default function App() {
                 >
                   {showPageReader ? "Hide Page Reader" : "Show Page Reader"}
                 </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowPrayerTimes((v) => !v)}
+                >
+                  {showPrayerTimes ? "Hide Prayer Times" : "Show Prayer Times"}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -708,6 +718,10 @@ export default function App() {
             </CardContent>
           </Card>
         </div>
+
+        {showPrayerTimes && (
+          <PrayerTimes />
+        )}
 
         {showPageReader && (
           <QuranReader />
