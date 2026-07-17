@@ -40,6 +40,7 @@ export function InstallPWA() {
     
     // Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
     
     // We no longer need the prompt. Clear it up.
     setDeferredPrompt(null);
