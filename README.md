@@ -1,73 +1,55 @@
-# React + TypeScript + Vite
+# Quran Khotmer 📖
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplikasi web progresif (PWA) untuk membantu Anda mengatur target bacaan/khatam Al-Qur'an secara terstruktur. Anda bisa merencanakan bacaan harian atau membaginya per waktu sholat (5 waktu).
 
-Currently, two official plugins are available:
+## Fitur Utama ✨
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Pembagian Target**: Bagi target khatam berdasarkan *per hari* atau *per habis sholat*.
+- **Satuan Fleksibel**: Hitung target menggunakan satuan **Halaman** (default 604 halaman mushaf standar) atau **Ayat**.
+- **Mode PWA (Progressive Web App)**: Bisa di-install langsung ke *homescreen* HP atau Desktop Anda (mendukung mode *offline*).
+- **Checklist Interaktif**: Lacak progress harian/per-slot bacaan Anda. Data disimpan otomatis secara lokal di perangkat Anda (menggunakan *LocalStorage*).
+- **Share Progress**: Bagikan pencapaian atau target harian Anda ke media sosial dalam bentuk gambar yang menarik.
+- **Dark/Light Mode**: Didesain menyesuaikan kenyamanan membaca Anda, lengkap dengan kustomisasi *accent color*.
+- **Quran Reader**: Dilengkapi dengan fitur baca Qur'an langsung di dalam aplikasi (termasuk jadwal sholat).
 
-## React Compiler
+## Teknologi yang Digunakan 💻
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 19** + **TypeScript**
+- **Vite** (Build Tool super cepat)
+- **Tailwind CSS v4** (Styling)
+- **Radix UI** / shadcn-ui (Komponen UI yang aksesibel)
+- **Lucide React** (Ikonografi)
+- **Date-fns** (Manipulasi tanggal)
+- **Html-to-image** (Ekspor grafik bagikan/share)
 
-## Expanding the ESLint configuration
+## Menjalankan Proyek Secara Lokal 🚀
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Jika Anda ingin berkontribusi atau menjalankan proyek ini di mesin Anda sendiri:
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+1. Clone repositori ini:
+   ```bash
+   git clone https://github.com/manHax/quran-khotmer.git
+   ```
+2. Pindah ke direktori proyek:
+   ```bash
+   cd quran-khotmer
+   ```
+3. Install dependensi (menggunakan npm, yarn, pnpm, atau bun):
+   ```bash
+   npm install
+   ```
+4. Jalankan *development server*:
+   ```bash
+   npm run dev
+   ```
+5. Buka `http://localhost:5173/` di browser Anda!
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Membangun / Build untuk Production 📦
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Untuk membuat *build production* (siap *deploy*):
+
+```bash
+npm run build
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Hasil build akan berada di direktori `/dist` dan siap di-deploy ke Vercel, Netlify, atau layanan hosting statis lainnya.
