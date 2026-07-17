@@ -1,6 +1,7 @@
 {
   "name": "quran-khotmer",
   "short_name": "quran-khotmer",
+  "start_url": "/",
   "icons": [
     {
       "src": "/favicon-192.png",

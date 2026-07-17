@@ -21,6 +21,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import QuranReader from "./QuranReader";
 import PrayerTimes from "./components/PrayerTimes";
+import { InstallPWA } from "./components/InstallPWA";
 
 
 // Quran Khatam Separator (simple)
@@ -897,6 +898,7 @@ export default function App() {
         </div>
       </div>
 
+      <InstallPWA />
     </div>
   );
 }
